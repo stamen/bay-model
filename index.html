@@ -317,7 +317,9 @@ function tick(ts) {
 
   if (lastTs != null) {
     const dt = Math.min((ts - lastTs) / 1000, 0.1); // cap delta at 100 ms
-    cycleT += dt * ZOOM_SPEED / ZOOM_RANGE;
+    // Vary speed sinusoidally: slow near transition (t≈0 and t≈1), faster in the middle.
+    const speedFactor = 0.6 + 0.65 * Math.sin(Math.PI * cycleT);
+    cycleT += dt * ZOOM_SPEED * speedFactor / ZOOM_RANGE;
 
     if (cycleT >= 1.0) {
       cycleT    -= 1.0;
