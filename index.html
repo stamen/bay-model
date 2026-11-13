@@ -272,19 +272,15 @@ function applyState() {
   front.jumpTo({ center: CENTER, zoom: zoomFront });
   back.jumpTo({ center: CENTER, zoom: zoomBack });
 
-  // Compute opacities
-  let fOpacity, bOpacity;
-  if (cycleT < FADE_START) {
-    fOpacity = 1;
-    bOpacity = 0;
-  } else {
-    const p = (cycleT - FADE_START) / (1 - FADE_START);
-    fOpacity = 1 - p;
-    bOpacity = p;
-  }
+  // Front stays fully opaque; back fades in on top.
+  // Keeping front at 1 prevents the dark page background bleeding through.
+  const backOpacity = cycleT < FADE_START ? 0
+    : (cycleT - FADE_START) / (1 - FADE_START);
 
-  front.getContainer().style.opacity = String(fOpacity);
-  back.getContainer().style.opacity  = String(bOpacity);
+  front.getContainer().style.opacity = '1';
+  front.getContainer().style.zIndex  = '1';
+  back.getContainer().style.opacity  = String(backOpacity);
+  back.getContainer().style.zIndex   = '2';
 
   // Sync scrubber (only when not being dragged)
   const scrubEl = document.getElementById('scrubber');
