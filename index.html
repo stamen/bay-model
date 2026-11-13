@@ -222,7 +222,7 @@ function addOverlay(map) {
       'text-field': 'Bay Model',
       'text-font': styleFont,
       'text-anchor': 'center',
-      'text-size': ['interpolate', ['linear'], ['zoom'], 9, 9, 14, 13, 19, 20],
+      'text-size': ['interpolate', ['linear'], ['zoom'], 14, 13, 19, 20],
       'text-letter-spacing': 0.08,
       'text-allow-overlap': true,
       'text-ignore-placement': true,
@@ -231,6 +231,7 @@ function addOverlay(map) {
       'text-color': '#1e5f82',
       'text-halo-color': 'rgba(255,255,255,0.75)',
       'text-halo-width': 1.5,
+      'text-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14, 1],
     },
   });
 }
