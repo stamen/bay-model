@@ -175,6 +175,14 @@ function makeMap(id) {
   });
 }
 
+function disableBuildingHatch(map) {
+  map.getStyle().layers.forEach(layer => {
+    if (layer.type === 'fill' && layer.id.toLowerCase().includes('building')) {
+      try { map.setPaintProperty(layer.id, 'fill-pattern', null); } catch(e) {}
+    }
+  });
+}
+
 function saturateWater(map) {
   map.getStyle().layers.forEach(layer => {
     if (layer.type === 'fill' && layer.id.toLowerCase().includes('water')) {
@@ -238,7 +246,7 @@ function addOverlay(map) {
 
 function onLoad() {
   if (++mapsReady < 2) return;
-  maps.forEach(m => { saturateWater(m); addOverlay(m); });
+  maps.forEach(m => { saturateWater(m); disableBuildingHatch(m); addOverlay(m); });
 
   // Initial opacity: map A front, map B hidden
   maps[0].getContainer().style.opacity = '1';
