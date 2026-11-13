@@ -245,7 +245,9 @@ function onLoad() {
 
   const btn = document.getElementById('play-btn');
   btn.disabled = false;
-  btn.textContent = '▶ Play';
+  btn.textContent = '⏸ Pause';
+  isPlaying = true;
+  raf = requestAnimationFrame(tick);
   applyState();
 }
 
