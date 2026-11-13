@@ -145,7 +145,7 @@ const CENTER      = [-122.49518, 37.86354];
 const ZOOM_MIN    = 8.9;
 const ZOOM_MAX    = 19.0;
 const ZOOM_RANGE  = ZOOM_MAX - ZOOM_MIN;   // 10 levels
-const ZOOM_SPEED  = 0.40;  // zoom levels per second (~25 sec / cycle)
+const ZOOM_SPEED  = 0.80;  // zoom levels per second (~12.5 sec / cycle)
 const FADE_START  = 0.82;  // begin crossfade at 82% through cycle (≈zoom 17.2)
 const GEOJSON     = './bay-model.geojson';
 const STYLE       = 'https://tiles.openfreemap.org/styles/positron';
@@ -199,6 +199,32 @@ function addOverlay(map) {
     type: 'line',
     source: 'bay-model',
     paint: { 'line-color': WATER_COLOR, 'line-width': 1.5, 'line-opacity': 1.0 },
+  });
+
+  map.addSource('bay-model-point', {
+    type: 'geojson',
+    data: {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: CENTER },
+      properties: {},
+    },
+  });
+  map.addLayer({
+    id: 'bay-label',
+    type: 'symbol',
+    source: 'bay-model-point',
+    layout: {
+      'text-field': 'Bay Model',
+      'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
+      'text-anchor': 'center',
+      'text-size': ['interpolate', ['linear'], ['zoom'], 9, 9, 14, 13, 19, 20],
+      'text-letter-spacing': 0.08,
+    },
+    paint: {
+      'text-color': '#1e5f82',
+      'text-halo-color': 'rgba(255,255,255,0.75)',
+      'text-halo-width': 1.5,
+    },
   });
 }
 
