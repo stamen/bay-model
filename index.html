@@ -145,7 +145,7 @@ const CENTER      = [-122.49518, 37.86354];
 const ZOOM_MIN    = 8.9;
 const ZOOM_MAX    = 19.0;
 const ZOOM_RANGE  = ZOOM_MAX - ZOOM_MIN;   // 10 levels
-const ZOOM_SPEED  = 0.80;  // zoom levels per second (~12.5 sec / cycle)
+const ZOOM_SPEED  = 1.00;  // zoom levels per second (~10 sec / cycle)
 const FADE_START  = 0.82;  // begin crossfade at 82% through cycle (≈zoom 17.2)
 const GEOJSON     = './bay-model.geojson';
 const STYLE       = 'https://tiles.openfreemap.org/styles/positron';
@@ -201,6 +201,11 @@ function addOverlay(map) {
     paint: { 'line-color': WATER_COLOR, 'line-width': 1.5, 'line-opacity': 1.0 },
   });
 
+  // Pick a font that actually exists in the loaded style's glyph set.
+  const styleFont = map.getStyle().layers
+    .find(l => l.type === 'symbol' && l.layout?.['text-font'])
+    ?.layout['text-font'] ?? ['Noto Sans Regular'];
+
   map.addSource('bay-model-point', {
     type: 'geojson',
     data: {
@@ -215,10 +220,12 @@ function addOverlay(map) {
     source: 'bay-model-point',
     layout: {
       'text-field': 'Bay Model',
-      'text-font': ['Noto Sans Bold', 'Noto Sans Regular'],
+      'text-font': styleFont,
       'text-anchor': 'center',
       'text-size': ['interpolate', ['linear'], ['zoom'], 9, 9, 14, 13, 19, 20],
       'text-letter-spacing': 0.08,
+      'text-allow-overlap': true,
+      'text-ignore-placement': true,
     },
     paint: {
       'text-color': '#1e5f82',
