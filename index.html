@@ -178,7 +178,10 @@ function makeMap(id) {
 function disableBuildingHatch(map) {
   map.getStyle().layers.forEach(layer => {
     if (layer.type === 'fill' && layer.id.toLowerCase().includes('building')) {
-      try { map.setPaintProperty(layer.id, 'fill-pattern', null); } catch(e) {}
+      try {
+        map.setPaintProperty(layer.id, 'fill-pattern', null);
+        map.setPaintProperty(layer.id, 'fill-color', '#efefef');
+      } catch(e) {}
     }
   });
 }
