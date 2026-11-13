@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Borgesian Map — Bay Model</title>
+  <link href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" rel="stylesheet">
+  <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #111;
+      font-family: 'Georgia', serif;
+      color: #fff;
+    }
+
+    #maps-container {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 72px;
+    }
+
+    .map-wrap {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+    }
+
+    /* ---- controls bar ---- */
+    #controls {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 72px;
+      background: rgba(8, 8, 8, 0.93);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 0 24px;
+    }
+
+    #play-btn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.5);
+      color: #fff;
+      font-family: monospace;
+      font-size: 14px;
+      padding: 8px 20px;
+      cursor: pointer;
+      border-radius: 2px;
+      white-space: nowrap;
+      min-width: 96px;
+      transition: background 0.15s;
+    }
+    #play-btn:hover:not(:disabled) { background: rgba(255,255,255,0.08); }
+    #play-btn:disabled { opacity: 0.35; cursor: default; }
+
+    .scrubber-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    #scrubber {
+      width: 100%;
+      cursor: pointer;
+      accent-color: #ff6600;
+      height: 4px;
+    }
+
+    .scrubber-labels {
+      display: flex;
+      justify-content: space-between;
+      font-family: monospace;
+      font-size: 10px;
+      color: rgba(255,255,255,0.35);
+      user-select: none;
+    }
+
+    #status {
+      font-family: monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      white-space: nowrap;
+      min-width: 240px;
+      text-align: right;
+      line-height: 1.5;
+    }
+
+    /* ---- title overlay ---- */
+    #title-overlay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      pointer-events: none;
+      z-index: 10;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.95);
+    }
+    #title-overlay h1 {
+      font-size: 22px;
+      font-weight: normal;
+      letter-spacing: 0.06em;
+    }
+    #title-overlay p {
+      font-family: monospace;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="maps-container">
+  <div id="map-a" class="map-wrap"></div>
+  <div id="map-b" class="map-wrap"></div>
+</div>
+
+<div id="title-overlay">
+  <h1>Borgesian Map</h1>
+  <p>#30DayMapChallenge &bull; The Bay Model, Sausalito CA</p>
+</div>
+
+<div id="controls">
+  <button id="play-btn" disabled>Loading…</button>
+
+  <div class="scrubber-wrap">
+    <input type="range" id="scrubber" min="0" max="1000" value="0" step="1">
+    <div class="scrubber-labels">
+      <span>Bay Area (zoom 9)</span>
+      <span>Bay Model fills screen (zoom 19)</span>
+    </div>
+  </div>
+
+  <div id="status">loading…</div>
+</div>
+
+<script>
+// ─── constants ───────────────────────────────────────────────────────────────
+
+const CENTER      = [-122.49518, 37.86354];
+const ZOOM_MIN    = 8.9;
+const ZOOM_MAX    = 19.0;
+const ZOOM_RANGE  = ZOOM_MAX - ZOOM_MIN;   // 10 levels
+const ZOOM_SPEED  = 0.40;  // zoom levels per second (~25 sec / cycle)
+const FADE_START  = 0.82;  // begin crossfade at 82% through cycle (≈zoom 17.2)
+const GEOJSON     = './bay-model.geojson';
+const STYLE       = 'https://tiles.openfreemap.org/styles/positron';
+const WATER_COLOR = '#6aaed9'; // positron water, saturation bumped
+
+// ─── state ───────────────────────────────────────────────────────────────────
+
+let maps       = [null, null];
+let activeIdx  = 0;       // index of the "front" (fully visible) map
+let isPlaying  = false;
+let lastTs     = null;
+let cycleT     = 0;       // 0–1 progress through the current 10-zoom cycle
+let raf        = null;
+let mapsReady  = 0;
+
+// ─── map factory ─────────────────────────────────────────────────────────────
+
+function makeMap(id) {
+  return new maplibregl.Map({
+    container:        id,
+    style:            STYLE,
+    center:           CENTER,
+    zoom:             ZOOM_MIN,
+    attributionControl: false,
+    interactive:      false,
+    fadeDuration:     0,     // suppress tile-fade so jumps are instantaneous
+  });
+}
+
+function saturateWater(map) {
+  map.getStyle().layers.forEach(layer => {
+    if (layer.type === 'fill' && layer.id.toLowerCase().includes('water')) {
+      try { map.setPaintProperty(layer.id, 'fill-color', WATER_COLOR); } catch(e) {}
+    }
+    if (layer.type === 'line' && layer.id.toLowerCase().includes('water')) {
+      try { map.setPaintProperty(layer.id, 'line-color', WATER_COLOR); } catch(e) {}
+    }
+  });
+}
+
+function addOverlay(map) {
+  map.addSource('bay-model', { type: 'geojson', data: GEOJSON });
+  map.addLayer({
+    id: 'bay-fill',
+    type: 'fill',
+    source: 'bay-model',
+    paint: { 'fill-color': WATER_COLOR, 'fill-opacity': 0.55 },
+  });
+  map.addLayer({
+    id: 'bay-outline',
+    type: 'line',
+    source: 'bay-model',
+    paint: { 'line-color': WATER_COLOR, 'line-width': 1.5, 'line-opacity': 1.0 },
+  });
+}
+
+function onLoad() {
+  if (++mapsReady < 2) return;
+  maps.forEach(m => { saturateWater(m); addOverlay(m); });
+
+  // Initial opacity: map A front, map B hidden
+  maps[0].getContainer().style.opacity = '1';
+  maps[1].getContainer().style.opacity = '0';
+
+  const btn = document.getElementById('play-btn');
+  btn.disabled = false;
+  btn.textContent = '▶ Play';
+  applyState();
+}
+
+maps[0] = makeMap('map-a');
+maps[1] = makeMap('map-b');
+maps[0].on('load', onLoad);
+maps[1].on('load', onLoad);
+
+// ─── render ──────────────────────────────────────────────────────────────────
+
+function applyState() {
+  const zoomFront = ZOOM_MIN + cycleT * ZOOM_RANGE;
+  // Back map runs exactly ZOOM_RANGE behind: -1→9 while front goes 9→19.
+  // Both always moving at the same speed; handoff is clean at cycleT=1.
+  const zoomBack  = Math.max(0, (ZOOM_MIN - ZOOM_RANGE) + cycleT * ZOOM_RANGE);
+
+  const zoom  = zoomFront;
+  const front = maps[activeIdx];
+  const back  = maps[1 - activeIdx];
+
+  front.jumpTo({ center: CENTER, zoom: zoomFront });
+  back.jumpTo({ center: CENTER, zoom: zoomBack });
+
+  // Compute opacities
+  let fOpacity, bOpacity;
+  if (cycleT < FADE_START) {
+    fOpacity = 1;
+    bOpacity = 0;
+  } else {
+    const p = (cycleT - FADE_START) / (1 - FADE_START);
+    fOpacity = 1 - p;
+    bOpacity = p;
+  }
+
+  front.getContainer().style.opacity = String(fOpacity);
+  back.getContainer().style.opacity  = String(bOpacity);
+
+  // Sync scrubber (only when not being dragged)
+  const scrubEl = document.getElementById('scrubber');
+  if (!scrubEl.matches(':active')) {
+    scrubEl.value = String(Math.round(cycleT * 1000));
+  }
+
+  // Status text
+  const phase =
+    zoom < 11   ? 'SF Bay Area view' :
+    zoom < 14   ? 'approaching Sausalito…' :
+    zoom < 17.5 ? 'Bay Model visible' :
+                  'Bay Model fills screen';
+
+  document.getElementById('status').innerHTML =
+    `zoom ${zoom.toFixed(2)}<br><span style="opacity:.55">${phase}</span>`;
+}
+
+// ─── animation loop ──────────────────────────────────────────────────────────
+
+function tick(ts) {
+  if (!isPlaying) return;
+
+  if (lastTs != null) {
+    const dt = Math.min((ts - lastTs) / 1000, 0.1); // cap delta at 100 ms
+    cycleT += dt * ZOOM_SPEED / ZOOM_RANGE;
+
+    if (cycleT >= 1.0) {
+      cycleT    -= 1.0;
+      activeIdx  = 1 - activeIdx;
+      // No explicit reset: at cycleT≈0 the formula places the new back map
+      // at zoom ≈ ZOOM_MIN - ZOOM_RANGE (clamped to 0), invisibly below range.
+    }
+  }
+  lastTs = ts;
+  applyState();
+  raf = requestAnimationFrame(tick);
+}
+
+// ─── controls ────────────────────────────────────────────────────────────────
+
+document.getElementById('play-btn').addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  document.getElementById('play-btn').textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+  if (isPlaying) {
+    lastTs = null;
+    raf = requestAnimationFrame(tick);
+  } else {
+    cancelAnimationFrame(raf);
+  }
+});
+
+document.getElementById('scrubber').addEventListener('input', e => {
+  if (isPlaying) {
+    isPlaying = false;
+    document.getElementById('play-btn').textContent = '▶ Play';
+    cancelAnimationFrame(raf);
+  }
+  cycleT = Number(e.target.value) / 1000;
+  applyState();
+});
+</script>
+</body>
+</html>
