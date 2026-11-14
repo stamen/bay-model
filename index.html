@@ -68,8 +68,47 @@
     #scrubber {
       width: 100%;
       cursor: pointer;
-      accent-color: #ff6600;
+      height: 24px;          /* large touch target */
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      outline: none;
+    }
+    #scrubber::-webkit-slider-runnable-track {
       height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+    }
+    #scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ff6600;
+      margin-top: -7px;      /* center on 4px track */
+      cursor: pointer;
+      border: none;
+    }
+    #scrubber::-moz-range-track {
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 2px;
+      border: none;
+    }
+    #scrubber::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ff6600;
+      border: none;
+      cursor: pointer;
+    }
+
+    @media (max-width: 600px) {
+      #controls { gap: 12px; padding: 0 14px; }
+      #status { display: none; }
+      .scrubber-labels { display: none; }
+      #play-btn { padding: 8px 14px; min-width: 76px; }
     }
 
     .scrubber-labels {
