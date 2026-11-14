@@ -177,11 +177,17 @@ function makeMap(id) {
 
 function disableBuildingHatch(map) {
   map.getStyle().layers.forEach(layer => {
-    if (layer.type === 'fill' && layer.id.toLowerCase().includes('building')) {
+    const id = layer.id.toLowerCase();
+    if (!id.includes('building')) return;
+    if (layer.type === 'fill') {
       try {
         map.setPaintProperty(layer.id, 'fill-pattern', null);
-        map.setPaintProperty(layer.id, 'fill-color', '#efefef');
+        map.setPaintProperty(layer.id, 'fill-color', '#ffffff');
+        map.setPaintProperty(layer.id, 'fill-outline-color', '#c0c0c0');
       } catch(e) {}
+    }
+    if (layer.type === 'line') {
+      try { map.setPaintProperty(layer.id, 'line-color', '#c0c0c0'); } catch(e) {}
     }
   });
 }
