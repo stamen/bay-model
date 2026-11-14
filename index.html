@@ -21,6 +21,7 @@
     #maps-container {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 72px;
+      background: #fff; /* prevents dark body from bleeding through per-layer crossfade */
     }
 
     .map-wrap {
@@ -95,21 +96,72 @@
       position: absolute;
       top: 20px;
       left: 20px;
-      pointer-events: none;
       z-index: 10;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.95);
+      background: rgba(15, 15, 15, 0.82);
+      backdrop-filter: blur(4px);
+      border-radius: 4px;
+      padding: 16px 18px;
+      max-width: 300px;
     }
     #title-overlay h1 {
       font-size: 22px;
       font-weight: normal;
       letter-spacing: 0.06em;
+      color: #fff;
     }
-    #title-overlay p {
+    #title-overlay .tagline {
       font-family: monospace;
       font-size: 11px;
-      color: rgba(255,255,255,0.5);
+      color: rgba(255,255,255,0.45);
       margin-top: 5px;
     }
+    #about-btn {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.4);
+      font-family: monospace;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 0;
+      margin-top: 10px;
+      display: block;
+      letter-spacing: 0.03em;
+      transition: color 0.15s;
+    }
+    #about-btn:hover { color: rgba(255,255,255,0.8); }
+    #about-panel {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s ease;
+    }
+    #about-panel.open {
+      max-height: 65vh;
+      overflow-y: auto;
+    }
+    #about-panel::-webkit-scrollbar { width: 4px; }
+    #about-panel::-webkit-scrollbar-track { background: transparent; }
+    #about-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+    #about-panel p {
+      font-size: 13px;
+      color: rgba(255,255,255,0.75);
+      line-height: 1.65;
+      margin-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 12px;
+    }
+    #about-panel p.note {
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      border-top: none;
+      padding-top: 0;
+      border-left: 2px solid rgba(255,255,255,0.18);
+      padding-left: 9px;
+    }
+    #about-panel a {
+      color: #80c8e0;
+      text-underline-offset: 2px;
+    }
+    #about-panel a:hover { color: #fff; }
   </style>
 </head>
 <body>
@@ -120,8 +172,21 @@
 </div>
 
 <div id="title-overlay">
-  <h1>Borgesian Map</h1>
-  <p>#30DayMapChallenge &bull; The Bay Model, Sausalito CA</p>
+  <h1>The Bay Model</h1>
+  <p class="tagline">#30DayMapChallenge: Borgesian Map</p>
+  <button id="about-btn">About this map ▾</button>
+  <div id="about-panel">
+    <p>The <a href="https://en.wikipedia.org/wiki/U.S._Army_Corps_of_Engineers_Bay_Model">Bay Model</a> is a massive indoor 1:1000 scale model of the San Francisco Bay and its adjacent waters, built by the U.S. Army Corps of Engineers. It is now an <a href="https://www.spn.usace.army.mil/Missions/Recreation/Bay-Model-Visitor-Center/">educational center</a>, open to the public.</p>
+    <p>The sheer size of the model is staggering. It fills an entire warehouse, and you can walk around inside.</p>
+    <p>Because the model is focussed on hydrology, the land portions of the model are absent or (almost) completely undetailed, although there are a few cute scale models of features on land like <a href="https://www.atlasobscura.com/places/bay-model">Alcatraz, or the Golden Gate Bridge</a>. Pondering these not-so-tiny scale models, I found myself wondering, "What if the Bay Model had a Bay Model in it...?"</p>
+    <p>This infinitely zooming map is an answer to that question.</p>
+    <p></p>
+    <p class="note"><strong>Note 1:</strong> you may notice that the California Delta part of the model doesn't line up correctly. That's a real quirk of the model: to fit the model inside the building, they added an extra bend at Carquinez Strait.</p>
+    <p class="note"><strong>Note 2:</strong> I added <a href="https://www.openstreetmap.org/relation/21995840">the Bay Model outline to OpenStreetMap</a> as part of this project, estimating the shape based on the map in the <a href="https://www.spn.usace.army.mil/Portals/68/BayModelTourBrochure%20%28Updated%208-10-2026%29.pdf">Visitors Guide PDF</a> available online, and aligning it to OpenStreetMap users' GPS tracks from inside the building. If you visit the Bay Model anytime soon, please check my work!</p>
+    <p class="note"><strong>Note 3:</strong> When I mapped the shape into OSM, I was pleased to find that (if I did my mapping correctly) the model was built such that north in the model is aligned with true north. There's no reason for them to have built it that way, but it certainly makes this app simpler: no rotation required!</p>
+    <p>Made by <a href="https://mappingmashups.net">Alan McConchie</a> at <a href="https://stamen.com">Stamen Design</a>, for the <a href="https://stamen.github.io/30-day-map-challenge-2026">#30DayMapChallenge</a> Day 15: Borgesian Map</a>
+
+  </div>
 </div>
 
 <div id="controls">
@@ -146,14 +211,33 @@ const ZOOM_MIN    = 9.0;
 const ZOOM_MAX    = 19.1;
 const ZOOM_RANGE  = ZOOM_MAX - ZOOM_MIN;   // 10 levels
 const ZOOM_SPEED  = 1.00;  // zoom levels per second (~10 sec / cycle)
-const FADE_START  = 0.9;  // begin crossfade at 82% through cycle (≈zoom 17.2)
 const GEOJSON     = './bay-model.geojson';
+const GEOJSON_BUILDING     = './bay-model-building.geojson';
+
+// ─── per-layer transition zooms ──────────────────────────────────────────────
+// Each category fades out on the front map (and in on the back) at its own zoom.
+const LABEL_FADE_ZOOM  = 16.5;   // city/street labels (and Bay Model label)
+const ROAD_FADE_ZOOM   = 17.0;   // road lines — starts same time, ends later
+const BASE_FADE_ZOOM   = 18.5;  // land, water, buildings — the final handoff
+const LABEL_FADE_WIDTH = 0.50;   // labels: z16.5–17.0
+const ROAD_FADE_WIDTH  = 1.00;   // roads:  z17.0–18.0
+const BASE_FADE_WIDTH  = 0.50;   // base:   z18.5–19.0
+// All transitions complete before ZOOM_MAX (19.1) ✓
+
+const BAY_LABEL_OPACITY_EXPR =   // restored after transition so zoom-fade still works
+  ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14, 1];
+
+// Layers we add ourselves — excluded from the per-layer system so their custom
+// opacity expressions are never overwritten.
+const CUSTOM_IDS = new Set(['bay-fill', 'bay-outline', 'bay-label', 'bay-building-outline']);
 const STYLE       = 'https://tiles.stadiamaps.com/styles/stamen_toner_lite.json';
-const WATER_COLOR = '#6aaed9'; // positron water, saturation bumped
+const WATER_COLOR = '#6aaed9'; // applied to basemap water layers and overlay at full opacity
 
 // ─── state ───────────────────────────────────────────────────────────────────
 
-let maps       = [null, null];
+let layerCache       = null;   // built in onLoad; [{id, type, category}]
+let transitionActive = false;  // performance: skip per-layer calls outside transition zone
+let maps             = [null, null];
 let activeIdx  = 0;       // index of the "front" (fully visible) map
 let isPlaying  = false;
 let lastTs     = null;
@@ -209,13 +293,25 @@ function addOverlay(map) {
     id: 'bay-fill',
     type: 'fill',
     source: 'bay-model',
-    paint: { 'fill-color': WATER_COLOR, 'fill-opacity': 0.55 },
+    paint: { 'fill-color': WATER_COLOR, 'fill-opacity': 1.0 },
   });
   map.addLayer({
     id: 'bay-outline',
     type: 'line',
     source: 'bay-model',
     paint: { 'line-color': WATER_COLOR, 'line-width': 1.5, 'line-opacity': 1.0 },
+  });
+
+  map.addSource('bay-model-building', { type: 'geojson', data: GEOJSON_BUILDING });
+  map.addLayer({
+    id: 'bay-building-outline',
+    type: 'line',
+    source: 'bay-model-building',
+    paint: {
+      'line-color': 'gray',
+      'line-width': 1.5,
+      'line-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14, 0.8, 18, 0.8, 19, 0],
+    },
   });
 
   // Pick a font that actually exists in the loaded style's glyph set.
@@ -253,13 +349,56 @@ function addOverlay(map) {
   });
 }
 
+// ─── layer classification helpers ────────────────────────────────────────────
+
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+function fadeProg(zoom, startZoom, width) { return clamp01((zoom - startZoom) / width); }
+
+function classifyLayer(layer) {
+  if (CUSTOM_IDS.has(layer.id)) return 'custom';
+  if (layer.type === 'symbol') return 'label';
+  if (layer.type === 'line' &&
+      /road|tunnel|bridge|rail|ferry|path|track|aerialway|transport/.test(layer.id)) return 'road';
+  return 'base';
+}
+
+function opacityProps(type) {
+  if (type === 'fill')       return ['fill-opacity'];
+  if (type === 'line')       return ['line-opacity'];
+  if (type === 'symbol')     return ['text-opacity', 'icon-opacity'];
+  if (type === 'circle')     return ['circle-opacity'];
+  if (type === 'raster')     return ['raster-opacity'];
+  if (type === 'background') return ['background-opacity'];
+  return [];
+}
+
+function setLayerOp(map, id, type, opacity) {
+  opacityProps(type).forEach(prop => {
+    try { map.setPaintProperty(id, prop, opacity); } catch(e) {}
+  });
+}
+
 function onLoad() {
   if (++mapsReady < 2) return;
   maps.forEach(m => { saturateWater(m); disableBuildingHatch(m); addOverlay(m); });
 
-  // Initial opacity: map A front, map B hidden
+  // Build cache after addOverlay so our custom layers are included (and skipped).
+  layerCache = maps[0].getStyle().layers.map(l => ({
+    id: l.id, type: l.type, category: classifyLayer(l),
+  }));
+
+  // Back map: ALL layers start at opacity 0. Front is below (z-index 1) but
+  // always fully opaque, so the white #maps-container background is never exposed.
+  layerCache.forEach(({ id, type, category }) => {
+    if (category !== 'custom') setLayerOp(maps[1], id, type, 0);
+  });
+  maps[1].setPaintProperty('bay-fill',    'fill-opacity', 0);
+  maps[1].setPaintProperty('bay-outline', 'line-opacity', 0);
+
   maps[0].getContainer().style.opacity = '1';
-  maps[1].getContainer().style.opacity = '0';
+  maps[0].getContainer().style.zIndex  = '1';
+  maps[1].getContainer().style.opacity = '1';  // always 1 — layers control visibility
+  maps[1].getContainer().style.zIndex  = '2';
 
   const btn = document.getElementById('play-btn');
   btn.disabled = false;
@@ -278,26 +417,52 @@ maps[1].on('load', onLoad);
 
 function applyState() {
   const zoomFront = ZOOM_MIN + cycleT * ZOOM_RANGE;
-  // Back map runs exactly ZOOM_RANGE behind: -1→9 while front goes 9→19.
-  // Both always moving at the same speed; handoff is clean at cycleT=1.
   const zoomBack  = Math.max(0, (ZOOM_MIN - ZOOM_RANGE) + cycleT * ZOOM_RANGE);
+  const front     = maps[activeIdx];
+  const back      = maps[1 - activeIdx];
 
-  const zoom  = zoomFront;
-  const front = maps[activeIdx];
-  const back  = maps[1 - activeIdx];
+  // Back map must always be on top so its fading-in layers appear over the front's
+  // remaining base. This must update every frame since activeIdx can flip.
+  front.getContainer().style.zIndex = '1';
+  back.getContainer().style.zIndex  = '2';
 
   front.jumpTo({ center: CENTER, zoom: zoomFront });
   back.jumpTo({ center: CENTER, zoom: zoomBack });
 
-  // Front stays fully opaque; back fades in on top.
-  // Keeping front at 1 prevents the dark page background bleeding through.
-  const backOpacity = cycleT < FADE_START ? 0
-    : (cycleT - FADE_START) / (1 - FADE_START);
+  // ── per-category fade progress (front fades OUT, back fades IN) ──────────
+  const labelP = fadeProg(zoomFront, LABEL_FADE_ZOOM, LABEL_FADE_WIDTH);
+  const roadP  = fadeProg(zoomFront, ROAD_FADE_ZOOM,  ROAD_FADE_WIDTH);
+  const baseP  = fadeProg(zoomFront, BASE_FADE_ZOOM,  BASE_FADE_WIDTH);
 
-  front.getContainer().style.opacity = '1';
-  front.getContainer().style.zIndex  = '1';
-  back.getContainer().style.opacity  = String(backOpacity);
-  back.getContainer().style.zIndex   = '2';
+  // ── per-layer opacity on ALL layers, both maps ────────────────────────────
+  // Div opacity stays at 1 for both maps always. The white #maps-container
+  // background means no dark bleed even when base layers are mid-crossfade.
+  const anyP = labelP > 0 || roadP > 0 || baseP > 0;
+  if (layerCache && (anyP || transitionActive)) {
+    layerCache.forEach(({ id, type, category }) => {
+      if (category === 'custom') return;
+      const p = category === 'label' ? labelP :
+                category === 'road'  ? roadP  : baseP;
+      setLayerOp(front, id, type, 1 - p);
+      setLayerOp(back,  id, type, p);
+    });
+    // Custom overlay fades with the base transition
+    try {
+      front.setPaintProperty('bay-fill',    'fill-opacity', 1 - baseP);
+      back.setPaintProperty( 'bay-fill',    'fill-opacity', baseP);
+      front.setPaintProperty('bay-outline', 'line-opacity', 1 - baseP);
+      back.setPaintProperty( 'bay-outline', 'line-opacity', baseP);
+      front.setPaintProperty('bay-label',   'text-opacity', 1 - labelP);
+    } catch(e) {}
+    // Cleanup frame: restore bay-label zoom expression after transition ends
+    if (!anyP) {
+      try {
+        front.setPaintProperty('bay-label', 'text-opacity', BAY_LABEL_OPACITY_EXPR);
+        back.setPaintProperty( 'bay-label', 'text-opacity', BAY_LABEL_OPACITY_EXPR);
+      } catch(e) {}
+    }
+    transitionActive = anyP; // run one extra frame after transition ends to snap to 0/1
+  }
 
   // Sync scrubber (only when not being dragged)
   const scrubEl = document.getElementById('scrubber');
@@ -307,13 +472,13 @@ function applyState() {
 
   // Status text
   const phase =
-    zoom < 11   ? 'SF Bay Area view' :
-    zoom < 14   ? 'approaching Sausalito…' :
-    zoom < 17.5 ? 'Bay Model visible' :
-                  'Bay Model fills screen';
+    zoomFront < 11   ? 'SF Bay Area view' :
+    zoomFront < 14   ? 'approaching Sausalito…' :
+    zoomFront < 17.5 ? 'Bay Model visible' :
+                       'Bay Model fills screen';
 
   document.getElementById('status').innerHTML =
-    `zoom ${zoom.toFixed(2)}<br><span style="opacity:.55">${phase}</span>`;
+    `zoom ${zoomFront.toFixed(2)}<br><span style="opacity:.55">${phase}</span>`;
 }
 
 // ─── animation loop ──────────────────────────────────────────────────────────
@@ -330,8 +495,7 @@ function tick(ts) {
     if (cycleT >= 1.0) {
       cycleT    -= 1.0;
       activeIdx  = 1 - activeIdx;
-      // No explicit reset: at cycleT≈0 the formula places the new back map
-      // at zoom ≈ ZOOM_MIN - ZOOM_RANGE (clamped to 0), invisibly below range.
+      // applyState will immediately correct all layer opacities for the new activeIdx.
     }
   }
   lastTs = ts;
@@ -350,6 +514,13 @@ document.getElementById('play-btn').addEventListener('click', () => {
   } else {
     cancelAnimationFrame(raf);
   }
+});
+
+document.getElementById('about-btn').addEventListener('click', () => {
+  const panel = document.getElementById('about-panel');
+  const btn   = document.getElementById('about-btn');
+  const open  = panel.classList.toggle('open');
+  btn.textContent = open ? 'About this map ▴' : 'About this map ▾';
 });
 
 document.getElementById('scrubber').addEventListener('input', e => {
